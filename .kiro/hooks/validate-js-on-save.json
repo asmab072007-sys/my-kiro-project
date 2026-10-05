@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Validate JS on Save",
+      "trigger": "PostFileSave",
+      "description": "Runs a quick Node.js syntax check on any saved .js, .html, or .css file in the TodoFlow project. Reports issues to the terminal immediately after save.",
+      "matcher": "\\.(js|html|css)$",
+      "action": {
+        "type": "command",
+        "command": "node -e \"\nconst fs = require('fs');\nconst path = require('path');\nconst file = process.stdin.read ? '' : '';\nlet input = '';\nprocess.stdin.on('data', d => input += d);\nprocess.stdin.on('end', () => {\n  try {\n    const ctx = JSON.parse(input);\n    const filePath = ctx && ctx.file ? ctx.file : '';\n    if (filePath && filePath.endsWith('.js') && !filePath.includes('node_modules') && !filePath.includes('tests/')) {\n      const src = fs.readFileSync(filePath, 'utf8');\n      new Function(src.replace('module.exports', 'var _exports'));\n      console.log('[TodoFlow Hook] JS syntax OK: ' + path.basename(filePath));\n    }\n  } catch(e) {\n    process.stderr.write('[TodoFlow Hook] Issue in saved file: ' + e.message + '\\n');\n  }\n});\n\"",
+        "timeout": 10
+      }
+    }
+  ]
+}

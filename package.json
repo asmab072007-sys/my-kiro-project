@@ -1,0 +1,28 @@
+{
+  "name": "my-kiro-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/property.test.js",
+    "start": "python3 -m http.server 8080"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asmab072007-sys/my-kiro-project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/asmab072007-sys/my-kiro-project/issues"
+  },
+  "homepage": "https://github.com/asmab072007-sys/my-kiro-project#readme",
+  "devDependencies": {
+    "fast-check": "^4.10.2"
+  }
+}

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TodoFlow — Kiro University</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="header-logo" aria-hidden="true">✦</span>
+        <h1 class="header-title">TodoFlow</h1>
+      </div>
+      <div class="header-stats">
+        <span class="stat-badge" id="active-count-badge" title="Active tasks">
+          <span id="active-count">0</span> active
+        </span>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <!-- Add Task Form -->
+      <section class="add-task-section" aria-label="Add new task">
+        <div class="add-task-form">
+          <div class="input-row">
+            <input
+              type="text"
+              id="task-input"
+              class="task-input"
+              placeholder="What needs to be done?"
+              aria-label="New task text"
+              maxlength="200"
+              autocomplete="off"
+            />
+            <button id="add-btn" class="btn btn--primary" aria-label="Add task">
+              Add
+            </button>
+          </div>
+          <div class="input-meta-row">
+            <label class="meta-label" for="priority-select">Priority</label>
+            <select id="priority-select" class="meta-select" aria-label="Task priority">
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="high">High</option>
+            </select>
+            <label class="meta-label" for="due-date-input">Due</label>
+            <input
+              type="date"
+              id="due-date-input"
+              class="meta-date"
+              aria-label="Due date"
+            />
+          </div>
+          <p class="validation-msg" id="validation-msg" role="alert" aria-live="assertive"></p>
+        </div>
+      </section>
+
+      <!-- Controls: Filters + Search -->
+      <section class="controls-section" aria-label="Filter and search tasks">
+        <div class="filter-tabs" role="tablist" aria-label="Task filter">
+          <button class="filter-tab filter-tab--active" data-filter="all" role="tab" aria-selected="true">All</button>
+          <button class="filter-tab" data-filter="active" role="tab" aria-selected="false">Active</button>
+          <button class="filter-tab" data-filter="completed" role="tab" aria-selected="false">Completed</button>
+        </div>
+        <div class="search-wrapper">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            placeholder="Search tasks…"
+            aria-label="Search tasks"
+          />
+        </div>
+      </section>
+
+      <!-- Task List -->
+      <section class="task-list-section" aria-label="Task list">
+        <ul class="task-list" id="task-list" role="list" aria-live="polite">
+          <!-- tasks rendered here -->
+        </ul>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="empty-state" hidden>
+          <span class="empty-icon" aria-hidden="true">📋</span>
+          <p class="empty-title" id="empty-title">No tasks yet</p>
+          <p class="empty-sub" id="empty-sub">Add a task above to get started!</p>
+        </div>
+      </section>
+
+      <!-- Footer Summary -->
+      <footer class="task-summary" aria-label="Task summary">
+        <span id="summary-text">0 tasks total · 0 completed</span>
+        <button
+          id="clear-completed-btn"
+          class="btn btn--ghost btn--small"
+          aria-label="Clear all completed tasks"
+          hidden
+        >
+          Clear completed
+        </button>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    // Expose task-logic.js as window.TodoLogic for app.js
+    // (task-logic.js uses module.exports in Node, window.TodoLogic in browser)
+  </script>
+  <script src="task-logic.js"></script>
+  <script>
+    // Bridge: make task-logic exports available as window.TodoLogic
+    window.TodoLogic = {
+      createTask, addTask, deleteTask, toggleTask, editTask,
+      filterTasks, searchTasks, getVisibleTasks, isOverdue, formatDueDate, generateId
+    };
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

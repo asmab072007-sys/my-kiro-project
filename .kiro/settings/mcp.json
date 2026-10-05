@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "todoflow": {
+      "command": "node",
+      "args": ["mcp-server/todoflow-mcp.js"],
+      "disabled": false,
+      "description": "TodoFlow MCP server — exposes project info, test status, and task statistics to Kiro"
+    }
+  }
+}
