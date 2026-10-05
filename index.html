@@ -8,7 +8,8 @@
 </head>
 <body>
   <div class="app-wrapper">
-    <!-- Header -->
+
+    <!-- ===== HEADER ===== -->
     <header class="app-header">
       <div class="header-brand">
         <span class="header-logo" aria-hidden="true">✦</span>
@@ -22,7 +23,8 @@
     </header>
 
     <main class="app-main">
-      <!-- Add Task Form -->
+
+      <!-- ===== ADD TASK FORM ===== -->
       <section class="add-task-section" aria-label="Add new task">
         <div class="add-task-form">
           <div class="input-row">
@@ -35,35 +37,34 @@
               maxlength="200"
               autocomplete="off"
             />
-            <button id="add-btn" class="btn btn--primary" aria-label="Add task">
+            <button id="add-btn" class="btn btn--primary" type="button">
               Add
             </button>
           </div>
           <div class="input-meta-row">
             <label class="meta-label" for="priority-select">Priority</label>
-            <select id="priority-select" class="meta-select" aria-label="Task priority">
-              <option value="medium">Medium</option>
+            <select id="priority-select" class="meta-select">
+              <option value="medium" selected>Medium</option>
               <option value="low">Low</option>
               <option value="high">High</option>
             </select>
-            <label class="meta-label" for="due-date-input">Due</label>
+            <label class="meta-label" for="due-date-input">Due date</label>
             <input
               type="date"
               id="due-date-input"
               class="meta-date"
-              aria-label="Due date"
             />
           </div>
           <p class="validation-msg" id="validation-msg" role="alert" aria-live="assertive"></p>
         </div>
       </section>
 
-      <!-- Controls: Filters + Search -->
+      <!-- ===== FILTERS + SEARCH ===== -->
       <section class="controls-section" aria-label="Filter and search tasks">
         <div class="filter-tabs" role="tablist" aria-label="Task filter">
-          <button class="filter-tab filter-tab--active" data-filter="all" role="tab" aria-selected="true">All</button>
-          <button class="filter-tab" data-filter="active" role="tab" aria-selected="false">Active</button>
-          <button class="filter-tab" data-filter="completed" role="tab" aria-selected="false">Completed</button>
+          <button class="filter-tab filter-tab--active" data-filter="all"       role="tab" aria-selected="true"  type="button">All</button>
+          <button class="filter-tab"                    data-filter="active"    role="tab" aria-selected="false" type="button">Active</button>
+          <button class="filter-tab"                    data-filter="completed" role="tab" aria-selected="false" type="button">Completed</button>
         </div>
         <div class="search-wrapper">
           <span class="search-icon" aria-hidden="true">🔍</span>
@@ -77,47 +78,28 @@
         </div>
       </section>
 
-      <!-- Task List -->
+      <!-- ===== TASK LIST ===== -->
       <section class="task-list-section" aria-label="Task list">
-        <ul class="task-list" id="task-list" role="list" aria-live="polite">
-          <!-- tasks rendered here -->
-        </ul>
-
-        <!-- Empty State -->
-        <div class="empty-state" id="empty-state" hidden>
+        <ul class="task-list" id="task-list" role="list"></ul>
+        <div class="empty-state" id="empty-state">
           <span class="empty-icon" aria-hidden="true">📋</span>
           <p class="empty-title" id="empty-title">No tasks yet</p>
-          <p class="empty-sub" id="empty-sub">Add a task above to get started!</p>
+          <p class="empty-sub"   id="empty-sub">Add a task above to get started!</p>
         </div>
       </section>
 
-      <!-- Footer Summary -->
+      <!-- ===== FOOTER ===== -->
       <footer class="task-summary" aria-label="Task summary">
         <span id="summary-text">0 tasks total · 0 completed</span>
-        <button
-          id="clear-completed-btn"
-          class="btn btn--ghost btn--small"
-          aria-label="Clear all completed tasks"
-          hidden
-        >
+        <button id="clear-completed-btn" class="btn btn--ghost btn--small" type="button">
           Clear completed
         </button>
       </footer>
+
     </main>
   </div>
 
-  <script>
-    // Expose task-logic.js as window.TodoLogic for app.js
-    // (task-logic.js uses module.exports in Node, window.TodoLogic in browser)
-  </script>
-  <script src="task-logic.js"></script>
-  <script>
-    // Bridge: make task-logic exports available as window.TodoLogic
-    window.TodoLogic = {
-      createTask, addTask, deleteTask, toggleTask, editTask,
-      filterTasks, searchTasks, getVisibleTasks, isOverdue, formatDueDate, generateId
-    };
-  </script>
+  <!-- Single script — no bridge, no globals required -->
   <script src="app.js"></script>
 </body>
 </html>

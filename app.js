@@ -2,379 +2,471 @@
  * TodoFlow — app.js
  * Kiro University Build-Along
  *
- * Architecture:
- *  - Pure business logic lives in task-logic.js (testable in Node)
- *  - This file handles DOM, state, events, and persistence
- *  - render() derives DOM from state on every change
- *  - localStorage syncs on every state change
+ * Single self-contained file: all business logic + DOM + state + persistence.
+ * No external dependencies. No bridge pattern. Works as a plain classic script.
+ *
+ * task-logic.js is kept separately for Node.js property-based testing.
+ * The pure functions below are kept in sync with task-logic.js.
  */
 
-'use strict';
+(function () {
+  'use strict';
 
-/* =========================================
-   LOAD PURE LOGIC
-   (task-logic.js must be loaded before app.js in HTML)
-   ========================================= */
+  /* =============================================
+     PURE BUSINESS LOGIC  (mirrors task-logic.js)
+     ============================================= */
 
-const {
-  createTask,
-  addTask,
-  deleteTask,
-  toggleTask,
-  editTask,
-  filterTasks,
-  searchTasks,
-  getVisibleTasks,
-  isOverdue,
-  formatDueDate,
-} = window.TodoLogic;
+  var PRIORITIES = ['low', 'medium', 'high'];
 
-/* =========================================
-   CONSTANTS
-   ========================================= */
-const STORAGE_KEY = 'todoflow_tasks';
-
-/* =========================================
-   STATE
-   ========================================= */
-let state = {
-  tasks: [],
-  filter: 'all',      // 'all' | 'active' | 'completed'
-  search: '',
-};
-
-/* =========================================
-   PERSISTENCE
-   ========================================= */
-
-function saveTasks(tasks) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  } catch (e) {
-    console.warn('Could not save to localStorage:', e);
+  function generateId() {
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
   }
-}
 
-function loadTasks() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(t =>
-      t && typeof t.id === 'string' &&
-      typeof t.text === 'string' &&
-      typeof t.completed === 'boolean'
-    );
-  } catch (e) {
-    console.warn('Could not load from localStorage:', e);
-    return [];
+  function createTask(text, priority, dueDate) {
+    priority = PRIORITIES.indexOf(priority) !== -1 ? priority : 'medium';
+    return {
+      id:        generateId(),
+      text:      text.trim(),
+      completed: false,
+      priority:  priority,
+      dueDate:   dueDate || null,
+      createdAt: new Date().toISOString()
+    };
   }
-}
 
-/* =========================================
-   DOM REFERENCES
-   ========================================= */
-const taskInput = document.getElementById('task-input');
-const prioritySelect = document.getElementById('priority-select');
-const dueDateInput = document.getElementById('due-date-input');
-const addBtn = document.getElementById('add-btn');
-const taskList = document.getElementById('task-list');
-const emptyState = document.getElementById('empty-state');
-const emptyTitle = document.getElementById('empty-title');
-const emptySub = document.getElementById('empty-sub');
-const validationMsg = document.getElementById('validation-msg');
-const searchInput = document.getElementById('search-input');
-const filterTabs = document.querySelectorAll('.filter-tab');
-const activeCountEl = document.getElementById('active-count');
-const summaryTextEl = document.getElementById('summary-text');
-const clearCompletedBtn = document.getElementById('clear-completed-btn');
+  function addTask(tasks, task) {
+    return [task].concat(tasks);
+  }
 
-/* =========================================
-   VALIDATION
-   ========================================= */
-let validationTimer = null;
+  function deleteTask(tasks, id) {
+    return tasks.filter(function (t) { return t.id !== id; });
+  }
 
-function showValidation(msg) {
-  validationMsg.textContent = msg;
-  clearTimeout(validationTimer);
-  validationTimer = setTimeout(() => { validationMsg.textContent = ''; }, 3000);
-}
+  function toggleTask(tasks, id) {
+    return tasks.map(function (t) {
+      return t.id === id ? Object.assign({}, t, { completed: !t.completed }) : t;
+    });
+  }
 
-function clearValidation() {
-  validationMsg.textContent = '';
-  clearTimeout(validationTimer);
-}
+  function editTask(tasks, id, newText) {
+    var trimmed = newText.trim();
+    if (!trimmed) return tasks;
+    return tasks.map(function (t) {
+      return t.id === id ? Object.assign({}, t, { text: trimmed }) : t;
+    });
+  }
 
-/* =========================================
-   RENDER
-   ========================================= */
+  function filterTasks(tasks, filter) {
+    if (filter === 'active')    return tasks.filter(function (t) { return !t.completed; });
+    if (filter === 'completed') return tasks.filter(function (t) { return  t.completed; });
+    return tasks;
+  }
 
-function render() {
-  const visible = getVisibleTasks(state.tasks, state.filter, state.search);
-  const activeCount = state.tasks.filter(t => !t.completed).length;
-  const completedCount = state.tasks.filter(t => t.completed).length;
+  function searchTasks(tasks, query) {
+    var q = query ? query.trim().toLowerCase() : '';
+    if (!q) return tasks;
+    return tasks.filter(function (t) { return t.text.toLowerCase().indexOf(q) !== -1; });
+  }
 
-  // Header badge
-  activeCountEl.textContent = activeCount;
+  function getVisibleTasks(tasks, filter, search) {
+    return searchTasks(filterTasks(tasks, filter), search);
+  }
 
-  // Summary footer
-  summaryTextEl.textContent =
-    `${state.tasks.length} task${state.tasks.length !== 1 ? 's' : ''} total · ${completedCount} completed`;
+  function isOverdue(task) {
+    if (!task.dueDate || task.completed) return false;
+    var today = new Date().toISOString().slice(0, 10);
+    return task.dueDate < today;
+  }
 
-  // Clear completed button
-  clearCompletedBtn.hidden = completedCount === 0;
+  function formatDueDate(dueDate) {
+    if (!dueDate) return '';
+    var parts = dueDate.split('-');
+    var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
 
-  // Filter tabs
-  filterTabs.forEach(tab => {
-    const isActive = tab.dataset.filter === state.filter;
-    tab.classList.toggle('filter-tab--active', isActive);
-    tab.setAttribute('aria-selected', String(isActive));
-  });
+  /* =============================================
+     CONSTANTS
+     ============================================= */
 
-  // Empty state
-  if (visible.length === 0) {
-    taskList.hidden = true;
-    emptyState.hidden = false;
-    if (state.tasks.length === 0) {
-      emptyTitle.textContent = 'No tasks yet';
-      emptySub.textContent = 'Add a task above to get started!';
-    } else {
-      emptyTitle.textContent = 'No tasks match';
-      emptySub.textContent = 'Try a different filter or search term.';
+  var STORAGE_KEY = 'todoflow_tasks';
+
+  /* =============================================
+     STATE  — single source of truth
+     ============================================= */
+
+  var state = {
+    tasks:  [],
+    filter: 'all',
+    search: ''
+  };
+
+  /* =============================================
+     PERSISTENCE
+     ============================================= */
+
+  function saveTasks(tasks) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch (e) {
+      console.warn('[TodoFlow] localStorage save failed:', e);
     }
-  } else {
-    taskList.hidden = false;
-    emptyState.hidden = true;
   }
 
-  // Render task items
-  taskList.innerHTML = '';
-  visible.forEach(task => {
-    taskList.appendChild(createTaskElement(task));
-  });
-}
-
-function createTaskElement(task) {
-  const li = document.createElement('li');
-  li.className = `task-item${task.completed ? ' task-item--completed' : ''}`;
-  li.dataset.id = task.id;
-
-  // Checkbox
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.className = 'task-checkbox';
-  checkbox.checked = task.completed;
-  checkbox.setAttribute('aria-label',
-    `Mark "${task.text}" as ${task.completed ? 'incomplete' : 'complete'}`);
-  checkbox.addEventListener('change', () => handleToggle(task.id));
-
-  // Body
-  const body = document.createElement('div');
-  body.className = 'task-body';
-
-  const textEl = document.createElement('span');
-  textEl.className = 'task-text';
-  textEl.textContent = task.text;
-
-  const meta = document.createElement('div');
-  meta.className = 'task-meta';
-
-  // Priority badge
-  const badge = document.createElement('span');
-  badge.className = `priority-badge priority-badge--${task.priority}`;
-  badge.textContent = task.priority;
-  meta.appendChild(badge);
-
-  // Due date
-  if (task.dueDate) {
-    const due = document.createElement('span');
-    due.className = `due-date${isOverdue(task) ? ' due-date--overdue' : ''}`;
-    due.textContent = `${isOverdue(task) ? '⚠ ' : '📅 '}${formatDueDate(task.dueDate)}`;
-    meta.appendChild(due);
+  function loadTasks() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(function (t) {
+        return t &&
+          typeof t.id        === 'string' &&
+          typeof t.text      === 'string' &&
+          typeof t.completed === 'boolean';
+      });
+    } catch (e) {
+      console.warn('[TodoFlow] localStorage load failed:', e);
+      return [];
+    }
   }
 
-  body.appendChild(textEl);
-  body.appendChild(meta);
+  /* =============================================
+     DOM HELPERS
+     ============================================= */
 
-  // Actions
-  const actions = document.createElement('div');
-  actions.className = 'task-actions';
+  function $(id) { return document.getElementById(id); }
 
-  const editBtn = document.createElement('button');
-  editBtn.className = 'btn btn--icon btn--edit';
-  editBtn.setAttribute('aria-label', `Edit task: ${task.text}`);
-  editBtn.textContent = '✏️';
-  editBtn.addEventListener('click', () => {
-    // If this task is already being edited, save and close
-    const existingEdit = li.querySelector('.task-edit-input');
-    if (existingEdit) {
-      existingEdit.blur(); // triggers saveEdit via blur handler
+  /* =============================================
+     DOM REFERENCES  (resolved after DOMContentLoaded)
+     ============================================= */
+
+  var taskInput, prioritySelect, dueDateInput, addBtn;
+  var taskList, emptyState, emptyTitle, emptySub;
+  var validationMsg, searchInput;
+  var activeCountEl, summaryTextEl, clearCompletedBtn;
+  var filterTabEls;  // array, not NodeList
+
+  /* =============================================
+     VALIDATION MESSAGE
+     ============================================= */
+
+  var validationTimer = null;
+
+  function showValidation(msg) {
+    validationMsg.textContent = msg;
+    clearTimeout(validationTimer);
+    validationTimer = setTimeout(function () {
+      validationMsg.textContent = '';
+    }, 3000);
+  }
+
+  function clearValidation() {
+    clearTimeout(validationTimer);
+    validationMsg.textContent = '';
+  }
+
+  /* =============================================
+     RENDER
+     ============================================= */
+
+  function render() {
+    var visible       = getVisibleTasks(state.tasks, state.filter, state.search);
+    var activeCount   = state.tasks.filter(function (t) { return !t.completed; }).length;
+    var completedCount = state.tasks.filter(function (t) { return  t.completed; }).length;
+
+    /* header badge */
+    activeCountEl.textContent = activeCount;
+
+    /* footer summary */
+    summaryTextEl.textContent =
+      state.tasks.length + ' task' + (state.tasks.length !== 1 ? 's' : '') +
+      ' total · ' + completedCount + ' completed';
+
+    /* clear-completed button */
+    clearCompletedBtn.style.display = completedCount > 0 ? '' : 'none';
+
+    /* filter tab highlight */
+    filterTabEls.forEach(function (tab) {
+      var active = tab.getAttribute('data-filter') === state.filter;
+      if (active) {
+        tab.classList.add('filter-tab--active');
+        tab.setAttribute('aria-selected', 'true');
+      } else {
+        tab.classList.remove('filter-tab--active');
+        tab.setAttribute('aria-selected', 'false');
+      }
+    });
+
+    /* empty state vs task list */
+    if (visible.length === 0) {
+      taskList.style.display  = 'none';
+      emptyState.style.display = '';
+      if (state.tasks.length === 0) {
+        emptyTitle.textContent = 'No tasks yet';
+        emptySub.textContent   = 'Add a task above to get started!';
+      } else {
+        emptyTitle.textContent = 'No tasks match';
+        emptySub.textContent   = 'Try a different filter or search term.';
+      }
+    } else {
+      taskList.style.display  = '';
+      emptyState.style.display = 'none';
+    }
+
+    /* rebuild task list */
+    taskList.innerHTML = '';
+    visible.forEach(function (task) {
+      taskList.appendChild(buildTaskEl(task));
+    });
+  }
+
+  /* =============================================
+     BUILD A TASK <LI>
+     ============================================= */
+
+  function buildTaskEl(task) {
+    var li = document.createElement('li');
+    li.className = 'task-item' + (task.completed ? ' task-item--completed' : '');
+    li.setAttribute('data-id', task.id);
+
+    /* --- checkbox --- */
+    var cb = document.createElement('input');
+    cb.type      = 'checkbox';
+    cb.className = 'task-checkbox';
+    cb.checked   = task.completed;
+    cb.setAttribute('aria-label',
+      'Mark "' + task.text + '" as ' + (task.completed ? 'incomplete' : 'complete'));
+    cb.addEventListener('change', function () { handleToggle(task.id); });
+
+    /* --- body --- */
+    var body   = document.createElement('div');
+    body.className = 'task-body';
+
+    var textEl = document.createElement('span');
+    textEl.className   = 'task-text';
+    textEl.textContent = task.text;
+
+    var meta = document.createElement('div');
+    meta.className = 'task-meta';
+
+    /* priority badge */
+    var badge = document.createElement('span');
+    badge.className   = 'priority-badge priority-badge--' + task.priority;
+    badge.textContent = task.priority;
+    meta.appendChild(badge);
+
+    /* due date */
+    if (task.dueDate) {
+      var due = document.createElement('span');
+      var overdue = isOverdue(task);
+      due.className   = 'due-date' + (overdue ? ' due-date--overdue' : '');
+      due.textContent = (overdue ? '⚠ ' : '📅 ') + formatDueDate(task.dueDate);
+      meta.appendChild(due);
+    }
+
+    body.appendChild(textEl);
+    body.appendChild(meta);
+
+    /* --- actions --- */
+    var actions = document.createElement('div');
+    actions.className = 'task-actions';
+
+    var editBtn = document.createElement('button');
+    editBtn.type      = 'button';
+    editBtn.className = 'btn btn--icon btn--edit';
+    editBtn.setAttribute('aria-label', 'Edit: ' + task.text);
+    editBtn.textContent = '✏️';
+    editBtn.addEventListener('click', function () {
+      var existing = li.querySelector('.task-edit-input');
+      if (existing) { existing.blur(); return; }
+      startEdit(task.id, li, textEl);
+    });
+
+    var delBtn = document.createElement('button');
+    delBtn.type      = 'button';
+    delBtn.className = 'btn btn--icon btn--delete';
+    delBtn.setAttribute('aria-label', 'Delete: ' + task.text);
+    delBtn.textContent = '🗑️';
+    delBtn.addEventListener('click', function () { handleDelete(task.id); });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    li.appendChild(cb);
+    li.appendChild(body);
+    li.appendChild(actions);
+
+    return li;
+  }
+
+  /* =============================================
+     INLINE EDIT
+     ============================================= */
+
+  function startEdit(id, li, textEl) {
+    /* cancel any other active edit first */
+    var anyEdit = taskList.querySelector('.task-edit-input');
+    if (anyEdit) { anyEdit.blur(); return; }
+
+    var task = state.tasks.filter(function (t) { return t.id === id; })[0];
+    if (!task) return;
+
+    var inp = document.createElement('input');
+    inp.type      = 'text';
+    inp.className = 'task-edit-input';
+    inp.value     = task.text;
+    inp.setAttribute('aria-label', 'Edit task text');
+
+    textEl.parentNode.replaceChild(inp, textEl);
+    inp.focus();
+    inp.select();
+
+    var handled = false;
+
+    function commit() {
+      if (handled) return;
+      handled = true;
+      var newText = inp.value.trim();
+      if (newText && newText !== task.text) {
+        state.tasks = editTask(state.tasks, id, newText);
+        saveTasks(state.tasks);
+      }
+      render();
+    }
+
+    function cancel() {
+      if (handled) return;
+      handled = true;
+      render();
+    }
+
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+
+    inp.addEventListener('blur', commit, { once: true });
+  }
+
+  /* =============================================
+     EVENT HANDLERS
+     ============================================= */
+
+  function handleAdd() {
+    var text = taskInput.value.trim();
+    if (!text) {
+      showValidation('Task cannot be empty');
+      taskInput.focus();
       return;
     }
-    handleEditStart(task.id, li, textEl);
-  });
+    clearValidation();
 
-  const deleteBtn = document.createElement('button');
-  deleteBtn.className = 'btn btn--icon btn--delete';
-  deleteBtn.setAttribute('aria-label', `Delete task: ${task.text}`);
-  deleteBtn.textContent = '🗑️';
-  deleteBtn.addEventListener('click', () => handleDelete(task.id));
+    var task = createTask(text, prioritySelect.value, dueDateInput.value || null);
+    state.tasks = addTask(state.tasks, task);
+    saveTasks(state.tasks);
 
-  actions.appendChild(editBtn);
-  actions.appendChild(deleteBtn);
-
-  li.appendChild(checkbox);
-  li.appendChild(body);
-  li.appendChild(actions);
-
-  return li;
-}
-
-/* =========================================
-   EVENT HANDLERS
-   ========================================= */
-
-function handleAdd() {
-  const text = taskInput.value.trim();
-  if (!text) {
-    showValidation('Task cannot be empty');
+    taskInput.value       = '';
+    dueDateInput.value    = '';
+    prioritySelect.value  = 'medium';
     taskInput.focus();
-    return;
-  }
-  clearValidation();
 
-  const task = createTask(text, prioritySelect.value, dueDateInput.value || null);
-  state.tasks = addTask(state.tasks, task);
-  saveTasks(state.tasks);
-
-  // Reset inputs
-  taskInput.value = '';
-  dueDateInput.value = '';
-  prioritySelect.value = 'medium';
-  taskInput.focus();
-
-  render();
-
-  // Animate new item
-  const firstItem = taskList.querySelector('.task-item');
-  if (firstItem) {
-    firstItem.classList.add('task-item--new');
-    firstItem.addEventListener('animationend',
-      () => firstItem.classList.remove('task-item--new'), { once: true });
-  }
-}
-
-function handleToggle(id) {
-  state.tasks = toggleTask(state.tasks, id);
-  saveTasks(state.tasks);
-  render();
-}
-
-function handleDelete(id) {
-  state.tasks = deleteTask(state.tasks, id);
-  saveTasks(state.tasks);
-  render();
-}
-
-function handleEditStart(id, li, textEl) {
-  // Cancel any currently active edit before starting a new one
-  const existingEdit = taskList.querySelector('.task-edit-input');
-  if (existingEdit) {
-    // Trigger a clean cancel of the existing edit by calling render()
     render();
-    return;
-  }
 
-  const task = state.tasks.find(t => t.id === id);
-  if (!task) return;
-
-  const editInputEl = document.createElement('input');
-  editInputEl.type = 'text';
-  editInputEl.className = 'task-edit-input';
-  editInputEl.value = task.text;
-  editInputEl.setAttribute('aria-label', 'Edit task text');
-
-  textEl.replaceWith(editInputEl);
-  editInputEl.focus();
-  editInputEl.select();
-
-  // Flag to prevent blur from firing after a keyboard action already handled the edit
-  let editHandled = false;
-
-  function saveEdit() {
-    if (editHandled) return;
-    editHandled = true;
-    const newText = editInputEl.value.trim();
-    if (newText && newText !== task.text) {
-      state.tasks = editTask(state.tasks, id, newText);
-      saveTasks(state.tasks);
+    /* entry animation on new item */
+    var first = taskList.querySelector('.task-item');
+    if (first) {
+      first.classList.add('task-item--new');
+      first.addEventListener('animationend', function () {
+        first.classList.remove('task-item--new');
+      }, { once: true });
     }
+  }
+
+  function handleToggle(id) {
+    state.tasks = toggleTask(state.tasks, id);
+    saveTasks(state.tasks);
     render();
   }
 
-  function cancelEdit() {
-    if (editHandled) return;
-    editHandled = true;
-    // Restore original text without saving changes
+  function handleDelete(id) {
+    state.tasks = deleteTask(state.tasks, id);
+    saveTasks(state.tasks);
     render();
   }
 
-  editInputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); saveEdit(); }
-    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
-  });
+  function handleFilterChange(filter) {
+    state.filter = filter;
+    render();
+  }
 
-  // blur fires when the input loses focus (e.g. clicking elsewhere or tabbing away)
-  // The editHandled flag prevents double-save when keyboard action already committed
-  editInputEl.addEventListener('blur', saveEdit, { once: true });
-}
+  function handleSearch(q) {
+    state.search = q;
+    render();
+  }
 
-function handleFilterChange(filter) {
-  state.filter = filter;
-  render();
-}
+  function handleClearCompleted() {
+    state.tasks = state.tasks.filter(function (t) { return !t.completed; });
+    saveTasks(state.tasks);
+    render();
+  }
 
-function handleSearch(query) {
-  state.search = query;
-  render();
-}
+  /* =============================================
+     INIT  — runs after DOM is ready
+     ============================================= */
 
-function handleClearCompleted() {
-  state.tasks = state.tasks.filter(t => !t.completed);
-  saveTasks(state.tasks);
-  render();
-}
+  function init() {
+    /* resolve DOM references */
+    taskInput        = $('task-input');
+    prioritySelect   = $('priority-select');
+    dueDateInput     = $('due-date-input');
+    addBtn           = $('add-btn');
+    taskList         = $('task-list');
+    emptyState       = $('empty-state');
+    emptyTitle       = $('empty-title');
+    emptySub         = $('empty-sub');
+    validationMsg    = $('validation-msg');
+    searchInput      = $('search-input');
+    activeCountEl    = $('active-count');
+    summaryTextEl    = $('summary-text');
+    clearCompletedBtn = $('clear-completed-btn');
+    filterTabEls     = Array.prototype.slice.call(
+      document.querySelectorAll('.filter-tab')
+    );
 
-/* =========================================
-   EVENT LISTENERS
-   ========================================= */
+    /* wire up events */
+    addBtn.addEventListener('click', handleAdd);
 
-addBtn.addEventListener('click', handleAdd);
+    taskInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') handleAdd();
+    });
 
-taskInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleAdd();
-});
+    taskInput.addEventListener('input', function () {
+      if (taskInput.value.trim()) clearValidation();
+    });
 
-taskInput.addEventListener('input', () => {
-  if (taskInput.value.trim()) clearValidation();
-});
+    filterTabEls.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        handleFilterChange(tab.getAttribute('data-filter'));
+      });
+    });
 
-filterTabs.forEach(tab => {
-  tab.addEventListener('click', () => handleFilterChange(tab.dataset.filter));
-});
+    searchInput.addEventListener('input', function () {
+      handleSearch(searchInput.value);
+    });
 
-searchInput.addEventListener('input', (e) => handleSearch(e.target.value));
+    clearCompletedBtn.addEventListener('click', handleClearCompleted);
 
-clearCompletedBtn.addEventListener('click', handleClearCompleted);
+    /* load persisted tasks and render */
+    state.tasks = loadTasks();
+    render();
+  }
 
-/* =========================================
-   INIT
-   ========================================= */
+  /* Run init after DOM is fully parsed */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
-function init() {
-  state.tasks = loadTasks();
-  render();
-}
-
-init();
+}()); /* end IIFE */
