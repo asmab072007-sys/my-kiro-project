@@ -205,7 +205,15 @@ function createTaskElement(task) {
   editBtn.className = 'btn btn--icon btn--edit';
   editBtn.setAttribute('aria-label', `Edit task: ${task.text}`);
   editBtn.textContent = '✏️';
-  editBtn.addEventListener('click', () => handleEditStart(task.id, li, textEl));
+  editBtn.addEventListener('click', () => {
+    // If this task is already being edited, save and close
+    const existingEdit = li.querySelector('.task-edit-input');
+    if (existingEdit) {
+      existingEdit.blur(); // triggers saveEdit via blur handler
+      return;
+    }
+    handleEditStart(task.id, li, textEl);
+  });
 
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'btn btn--icon btn--delete';
@@ -270,6 +278,14 @@ function handleDelete(id) {
 }
 
 function handleEditStart(id, li, textEl) {
+  // Cancel any currently active edit before starting a new one
+  const existingEdit = taskList.querySelector('.task-edit-input');
+  if (existingEdit) {
+    // Trigger a clean cancel of the existing edit by calling render()
+    render();
+    return;
+  }
+
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
 
@@ -283,7 +299,12 @@ function handleEditStart(id, li, textEl) {
   editInputEl.focus();
   editInputEl.select();
 
+  // Flag to prevent blur from firing after a keyboard action already handled the edit
+  let editHandled = false;
+
   function saveEdit() {
+    if (editHandled) return;
+    editHandled = true;
     const newText = editInputEl.value.trim();
     if (newText && newText !== task.text) {
       state.tasks = editTask(state.tasks, id, newText);
@@ -292,11 +313,20 @@ function handleEditStart(id, li, textEl) {
     render();
   }
 
+  function cancelEdit() {
+    if (editHandled) return;
+    editHandled = true;
+    // Restore original text without saving changes
+    render();
+  }
+
   editInputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); saveEdit(); }
-    if (e.key === 'Escape') { render(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
   });
 
+  // blur fires when the input loses focus (e.g. clicking elsewhere or tabbing away)
+  // The editHandled flag prevents double-save when keyboard action already committed
   editInputEl.addEventListener('blur', saveEdit, { once: true });
 }
 
