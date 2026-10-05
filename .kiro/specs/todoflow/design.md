@@ -1,332 +1,435 @@
-# TodoFlow — Technical Design
+# TodoFlow — Design Document
 
-**Version:** 1.0.0  
-**Status:** Implemented — this document describes the actual system  
-**Last updated:** Reflects the code in `app.js`, `task-logic.js`, `index.html`, `style.css`
-
----
-
-## 1. Architecture Overview
-
-TodoFlow is a **single-page, zero-dependency, client-only web application**.
-
-```
-┌────────────────────────────────────────────────┐
-│                  Browser                        │
-│                                                │
-│  index.html  ──loads──►  style.css             │
-│      │                                         │
-│      └──loads──►  app.js  (single IIFE)        │
-│                     │                          │
-│                     ├── Pure Logic Functions   │
-│                     ├── State Object           │
-│                     ├── Persistence (localStorage) │
-│                     ├── render() / buildTaskEl()│
-│                     └── Event Handlers         │
-└────────────────────────────────────────────────┘
-```
-
-**No framework. No bundler. No server.** A single `<script src="app.js">` after the HTML body is the entire runtime.
-
-`task-logic.js` is a **parallel file** containing the same pure functions, exported via `module.exports` for Node.js. It is used exclusively by the test suite (`tests/property.test.js`, `tests/functional-sim.js`, `tests/logic-audit.js`). It is **not loaded by the browser**.
+**Feature:** TodoFlow Task Management Application  
+**Status:** ✅ Implemented — this document describes the system as built  
+**Source of truth:** `app.js` · `task-logic.js` · `index.html` · `style.css`
 
 ---
 
-## 2. File Structure
+## Overview
 
-```
-my-kiro-project/
-├── index.html          — HTML shell, layout structure, all element IDs
-├── style.css           — All styles (CSS custom properties, responsive, animations)
-├── app.js              — Application runtime (IIFE, all logic + DOM + state)
-├── task-logic.js       — Pure functions for Node.js testing (mirrors app.js logic)
-├── assets/
-│   ├── todo-background.svg       — Previous background (kept)
-│   └── todoflow-background.svg   — Current page background
-├── mcp-server/
-│   └── todoflow-mcp.js           — MCP server (project info, test status, task stats)
-├── tests/
-│   ├── property.test.js          — fast-check property-based tests (22 tests)
-│   ├── functional-sim.js         — Feature simulation tests (57 assertions)
-│   └── logic-audit.js            — Embedded logic audit (50 assertions)
-└── .kiro/
-    ├── specs/todoflow/           — This spec directory
-    ├── steering/                 — Coding, UI/UX, testing, product guidelines
-    ├── hooks/                    — PostFileSave JS syntax check hook
-    ├── agents/                   — Todo QA Agent
-    └── settings/mcp.json         — MCP server registration
-```
+TodoFlow is a **zero-dependency, client-side SPA** served as three static files. The entire runtime — state management, persistence, rendering, and event handling — lives inside a single self-invoking function expression (IIFE) in `app.js`. No module bundler, no transpiler, no package installation is required to run the application.
 
 ---
 
-## 3. UI Layout (Implemented)
+## Architecture
 
-The application uses a **two-column dashboard layout**:
+### High-Level Diagram
 
 ```
-┌─────────────────┬──────────────────────────────────────┐
-│   SIDEBAR       │   MAIN CONTENT                        │
-│   (230px fixed) │                                       │
-│                 │  Topbar: greeting + date + avatar      │
-│  Brand logo     │                                       │
-│  ─────────      │  Stats row: 4 cards                   │
-│  Dashboard      │  [Total] [Active] [Completed] [%]     │
-│  My Tasks       │                                       │
-│  Active         │  Add task section                     │
-│  Completed      │  [+ input] [Add task btn]             │
-│                 │  [Priority] [Due date]                 │
-│  ─────────      │                                       │
-│  Progress ring  │  Workspace section                    │
-│  "0 of 0 done"  │  Toolbar: heading + filter tabs       │
-│                 │  Search bar                           │
-│  Tip card       │  Task list (or empty state)           │
-│                 │  Footer: summary + clear btn          │
-└─────────────────┴──────────────────────────────────────┘
+Browser
+│
+├─ index.html          — HTML structure, all element IDs, SVG assets
+├─ style.css           — All visual styling (CSS custom properties, responsive, animations)
+└─ app.js (IIFE)
+    │
+    ├─ Pure Logic Layer      createTask, addTask, deleteTask, toggleTask,
+    │                        editTask, filterTasks, searchTasks,
+    │                        getVisibleTasks, isOverdue, formatDueDate
+    │
+    ├─ State Object          { tasks: [], filter: 'all', search: '' }
+    │
+    ├─ Persistence Layer     saveTasks()  →  localStorage
+    │                        loadTasks()  ←  localStorage
+    │
+    ├─ Render Layer          render()  →  buildTaskEl()  →  DOM
+    │
+    └─ Event Handlers        handleAdd, handleToggle, handleDelete,
+                             handleFilterChange, handleSearch,
+                             handleClearCompleted, startEdit
 ```
 
-Responsive breakpoints:
-- `≥ 900px` — full two-column layout
-- `720px–900px` — sidebar narrows to 200px, stats in 2-column grid
-- `< 720px` — sidebar becomes a horizontal top nav bar
-- `< 520px` — single column, stacked add form, 2×2 stat grid
+`task-logic.js` is a **parallel Node.js module** exporting the same pure functions via `module.exports`. It is never loaded in the browser — it exists solely for the test suite.
+
+### Why an IIFE?
+
+- Avoids polluting the global scope without requiring ES modules or a bundler
+- Works as a plain classic `<script src="app.js">` with no type="module"
+- Compatible with Python's `http.server` and any static host
+- All internal functions remain private to the closure
 
 ---
 
-## 4. Application State
+## Data Model
 
-All runtime state lives in a single plain object:
+### Task Object
 
 ```javascript
-var state = {
-  tasks:  [],     // array of Task objects (source of truth)
-  filter: 'all',  // 'all' | 'active' | 'completed'
-  search: ''      // current search query string
-};
-```
-
-**State mutation rules:**
-- Every mutation calls `saveTasks(state.tasks)` immediately after
-- `render()` is called after every mutation — full re-render, no partial updates
-- `state.filter` and `state.search` do NOT trigger localStorage writes (display-only)
-- `state.tasks` is the only persisted piece of state
-
----
-
-## 5. Pure Business Logic Functions
-
-These functions live in `app.js` (inside the IIFE) and are mirrored in `task-logic.js` for testing. They are **pure** — they take input, return new values, and have no side effects.
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `generateId()` | `() → string` | `Date.now().toString(36) + '-' + random(7)` — unique within a session |
-| `createTask(text, priority, dueDate)` | `(string, string, string\|null) → Task` | Creates canonical task object; trims text; validates priority |
-| `addTask(tasks, task)` | `(Task[], Task) → Task[]` | Returns `[task, ...tasks]` — new task prepended |
-| `deleteTask(tasks, id)` | `(Task[], string) → Task[]` | Returns filtered array excluding matching id |
-| `toggleTask(tasks, id)` | `(Task[], string) → Task[]` | Returns mapped array with `completed` flipped for matching id |
-| `editTask(tasks, id, newText)` | `(Task[], string, string) → Task[]` | Updates `text` for matching id; rejects empty strings silently |
-| `filterTasks(tasks, filter)` | `(Task[], string) → Task[]` | Applies status filter: `all/active/completed` |
-| `searchTasks(tasks, query)` | `(Task[], string) → Task[]` | Case-insensitive substring filter on `task.text` |
-| `getVisibleTasks(tasks, filter, search)` | `(Task[], string, string) → Task[]` | Composes `filterTasks` then `searchTasks` |
-| `isOverdue(task)` | `(Task) → boolean` | `true` if `dueDate < today (ISO)` AND `!completed` |
-| `formatDueDate(dueDate)` | `(string) → string` | Formats `YYYY-MM-DD` to `"Mon DD, YYYY"` (en-US locale) |
-
----
-
-## 6. Persistence Layer
-
-### Write path
-Every state mutation follows this exact sequence:
-```
-user action
-  → handler (handleAdd / handleToggle / handleDelete / handleEditStart / handleClearCompleted)
-  → mutate state.tasks (using pure function)
-  → saveTasks(state.tasks)              ← JSON.stringify → localStorage
-  → render()                            ← re-derive DOM from state
-```
-
-### Read path (on page load)
-```
-init()
-  → loadTasks()
-      → localStorage.getItem('todoflow_tasks')
-      → JSON.parse()
-      → validate: must be Array, each item must have id(string), text(string), completed(boolean)
-      → invalid items are filtered out; corrupt JSON returns []
-  → state.tasks = result
-  → render()
-```
-
-### localStorage key
-```
-'todoflow_tasks'
-```
-
-### Error handling
-Both `saveTasks` and `loadTasks` are wrapped in `try/catch`. Errors are logged with `console.warn` and do not propagate or crash the application.
-
----
-
-## 7. Rendering Flow
-
-`render()` is the **only function that touches the DOM for data display**. It runs after every state mutation and re-derives the entire visible DOM from `state`.
-
-```
-render()
-  │
-  ├── compute visible = getVisibleTasks(state.tasks, state.filter, state.search)
-  ├── compute activeCount, completedCount, pct
-  │
-  ├── update stat display elements (active-count, stat-total, stat-done,
-  │     stat-progress, progress-ring-fill, progress-pct, progress-sub,
-  │     nav-total, nav-active, nav-done, visible-count-badge, summary-text)
-  │
-  ├── show/hide clear-completed-btn (style.display)
-  │
-  ├── update filter-tab--active class + aria-selected on all .filter-tab elements
-  │
-  ├── show/hide task list vs empty state (style.display)
-  │   └── set empty-title / empty-sub text based on whether tasks exist at all
-  │
-  └── taskList.innerHTML = ''
-      forEach(visible, task → taskList.appendChild(buildTaskEl(task)))
-```
-
-`buildTaskEl(task)` constructs a complete `<li>` for one task:
-- `input[type=checkbox]` — checked state bound to task.completed
-- `.task-text` span — task.text content
-- `.task-meta` div — priority badge + optional due-date span
-- `.task-actions` div — edit button + delete button
-- Completed tasks get class `task-item--completed`
-
----
-
-## 8. Edit Mode
-
-Inline editing uses a **temporary DOM substitution** pattern:
-
-```
-startEdit(id, li, textEl)
-  │
-  ├── check for existing .task-edit-input (prevent concurrent edits)
-  ├── create <input class="task-edit-input"> with task.text value
-  ├── textEl.parentNode.replaceChild(inp, textEl)  ← replaces span with input
-  ├── inp.focus(); inp.select()
-  │
-  ├── set `handled` flag (prevents blur double-fire after keyboard commit)
-  │
-  ├── keydown: Enter → commit()  |  Escape → cancel()
-  └── blur: commit() (once)
-      │
-      commit():
-        if handled → return
-        set handled = true
-        if newText.trim() && newText !== task.text → editTask() + saveTasks()
-        render()   ← replaces temporary input with rebuilt task element
-      │
-      cancel():
-        if handled → return
-        set handled = true
-        render()   ← restores original without saving
-```
-
-The `handled` flag prevents the blur event from firing `commit()` a second time when Enter/Escape already triggered a `render()` that removed the input from the DOM.
-
----
-
-## 9. Filter and Search Flow
-
-```
-Filter change (tab click or sidebar nav click):
-  state.filter = newFilter
-  render()   ← no localStorage write, display-only change
-
-Search change (input event):
-  state.search = searchInput.value
-  render()   ← no localStorage write, display-only change
-
-getVisibleTasks:
-  filterTasks(state.tasks, state.filter)   ← status filter first
-    ↓
-  searchTasks(filtered, state.search)      ← text search second
-    ↓
-  visible[]   ← what render() uses to build the DOM
-```
-
-Search and filter are **non-destructive**: `state.tasks` is never modified by display operations.
-
----
-
-## 10. Overdue Detection
-
-```javascript
-function isOverdue(task) {
-  if (!task.dueDate || task.completed) return false;
-  var today = new Date().toISOString().slice(0, 10);  // 'YYYY-MM-DD'
-  return task.dueDate < today;  // lexicographic ISO date comparison
+{
+  id:        string,   // unique — Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9)
+  text:      string,   // trimmed, non-empty; max 200 chars (enforced by HTML maxlength)
+  completed: boolean,  // false at creation; mutated only by toggleTask()
+  priority:  string,   // 'low' | 'medium' | 'high' — invalid values coerced to 'medium'
+  dueDate:   string|null,  // 'YYYY-MM-DD' ISO date string, or null if not set
+  createdAt: string    // new Date().toISOString() — set at creation, never changed
 }
 ```
 
-Called inside `buildTaskEl` for every task that has a `dueDate`. Completed tasks are explicitly exempt — a completed task with a past due date is never shown as overdue.
+### State Object
+
+```javascript
+var state = {
+  tasks:  [],     // Task[] — single source of truth; the only persisted field
+  filter: 'all',  // 'all' | 'active' | 'completed' — display-only, not persisted
+  search: ''      // current search query — display-only, not persisted
+};
+```
+
+### localStorage Schema
+
+| Key | Value |
+|-----|-------|
+| `todoflow_tasks` | `JSON.stringify(state.tasks)` — a JSON array of Task objects |
 
 ---
 
-## 11. Greeting and Date (Display Only)
+## Component Structure (HTML)
 
-Set once during `init()`, never updated again:
+```
+.app-layout
+├── aside.sidebar                    — Dark sidebar (230 px, sticky)
+│   ├── .sidebar-brand               — Logo + "TodoFlow" + "Productivity"
+│   ├── nav.sidebar-nav              — 4 filter shortcut buttons
+│   │   ├── button[data-filter=all]  — Dashboard (→ filter 'all')
+│   │   ├── button[data-filter=all]  — My Tasks  (→ filter 'all')
+│   │   ├── button[data-filter=active]   — Active
+│   │   └── button[data-filter=completed] — Completed
+│   ├── .sidebar-progress-card       — SVG ring + % text + "X of Y done"
+│   └── .sidebar-tip                 — Static motivational copy
+│
+└── .main-content                    — Flexible remaining width
+    ├── header.topbar                — Greeting + date + avatar
+    ├── section.stats-row            — 4 stat cards (Total/Active/Done/%)
+    ├── section.add-task-section     — Task input + Add button + Priority/DueDate
+    └── section.workspace-section
+        ├── .workspace-toolbar       — Heading + visible-count badge + filter tabs
+        ├── .search-row              — Full-width search input
+        ├── .task-list-wrap
+        │   ├── ul#task-list         — Rendered task items (built by buildTaskEl)
+        │   └── #empty-state         — Shown when visible.length === 0
+        └── footer.workspace-footer  — Summary text + Clear completed button
+```
 
-```javascript
-// Greeting based on hour-of-day
-var h = new Date().getHours();
-var g = h < 12 ? 'Good morning 👋' : h < 17 ? 'Good afternoon 👋' : 'Good evening 👋';
-$('greeting-title').textContent = g;
+### DOM IDs (all managed by app.js)
 
-// Date label
-var now = new Date();
-$('topbar-date').textContent = days[now.getDay()] + ', ' + months[now.getMonth()] + ' ' + now.getDate();
+| ID | Purpose |
+|----|---------|
+| `task-input` | New task text field |
+| `priority-select` | Priority dropdown |
+| `due-date-input` | Due date picker |
+| `add-btn` | Add task button |
+| `task-list` | `<ul>` receiving rendered task `<li>` elements |
+| `empty-state` | Hidden/shown based on `visible.length` |
+| `empty-title` / `empty-sub` | Dynamic empty state copy |
+| `validation-msg` | Inline error for empty task attempt |
+| `search-input` | Real-time search field |
+| `active-count` | "In Progress" stat card value |
+| `stat-total` | Total tasks count |
+| `stat-done` | Completed tasks count |
+| `stat-progress` | Completion percentage text |
+| `progress-ring-fill` | SVG circle — `stroke-dashoffset` animated |
+| `progress-pct` | % text overlay on ring |
+| `progress-sub` | "X of Y done" text |
+| `nav-total` / `nav-active` / `nav-done` | Sidebar nav badge counts |
+| `visible-count-badge` | Toolbar "N tasks" badge |
+| `summary-text` | Footer task summary line |
+| `clear-completed-btn` | Shown/hidden via `style.display` |
+| `greeting-title` | Time-of-day greeting set once in `init()` |
+| `topbar-date` | Current date set once in `init()` |
+
+---
+
+## Pure Logic Functions
+
+All functions are **pure**: given the same inputs they always return the same output and cause no side effects.
+
+```
+generateId()
+  → string: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,9)
+  Purpose: collision-resistant unique ID within a browser session
+
+createTask(text, priority, dueDate)
+  → Task
+  Trims text. Validates priority against ['low','medium','high']; defaults to 'medium'.
+  Sets completed: false, createdAt: new Date().toISOString().
+
+addTask(tasks, task)
+  → Task[]
+  Returns [task, ...tasks]  — new task is always first.
+
+deleteTask(tasks, id)
+  → Task[]
+  Returns tasks.filter(t => t.id !== id)
+
+toggleTask(tasks, id)
+  → Task[]
+  Returns tasks.map(t => t.id === id ? {...t, completed: !t.completed} : t)
+
+editTask(tasks, id, newText)
+  → Task[]
+  If newText.trim() is empty → returns tasks unchanged.
+  Otherwise → maps to {...t, text: trimmed} for matching id.
+
+filterTasks(tasks, filter)
+  → Task[]
+  'active'    → tasks.filter(t => !t.completed)
+  'completed' → tasks.filter(t =>  t.completed)
+  'all'       → tasks (unchanged reference)
+
+searchTasks(tasks, query)
+  → Task[]
+  If query.trim() is empty → returns tasks unchanged.
+  Otherwise → case-insensitive substring match on t.text.toLowerCase()
+
+getVisibleTasks(tasks, filter, search)
+  → Task[]
+  Composes: searchTasks(filterTasks(tasks, filter), search)
+  Filter is applied first; search narrows within that result.
+
+isOverdue(task)
+  → boolean
+  false if !task.dueDate OR task.completed
+  true  if task.dueDate < new Date().toISOString().slice(0,10)
+  Uses lexicographic ISO date comparison (correct for YYYY-MM-DD).
+
+formatDueDate(dueDate)
+  → string
+  Parses 'YYYY-MM-DD' by splitting on '-' (avoids UTC timezone offset).
+  Returns toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})
 ```
 
 ---
 
-## 12. Important Implementation Decisions
+## State Management
 
-| Decision | Rationale |
-|----------|-----------|
-| Single IIFE in app.js | Avoids global scope pollution without requiring ES modules or a bundler |
-| task-logic.js mirrors app.js pure functions | Allows Node.js property-based tests without a DOM or browser |
-| Full re-render on every change | Simple, predictable, no state/DOM sync bugs; fast enough for <500 tasks |
-| `style.display` instead of `hidden` attribute | More reliable cross-browser for show/hide toggling via JS |
-| `handled` flag in edit mode | Prevents double-commit when blur fires after Enter/Escape removes the input |
-| Lexicographic ISO date comparison for overdue | `'YYYY-MM-DD' < 'YYYY-MM-DD'` works correctly for date ordering |
-| `Array.prototype.slice.call(NodeList)` | ES5-compatible conversion; avoids `Array.from` which needs a polyfill |
-| localStorage wrapped in try/catch | Private browsing or full storage silently fails rather than crashing |
-| Tasks prepended, not appended | Most recently added task is most relevant; no sort needed |
-| Sidebar nav items fire `handleFilterChange` | Sidebar is a visual shortcut to the same filter tabs — single handler |
+### Mutation Flow
+
+Every user action follows this exact sequence — no exceptions:
+
+```
+User action
+    ↓
+Event handler
+    ↓
+Pure function  →  new tasks array (state.tasks = result)
+    ↓
+saveTasks(state.tasks)  →  localStorage write (try/catch)
+    ↓
+render()  →  full DOM re-derive
+```
+
+`state.filter` and `state.search` change without a localStorage write — they are display-only state.
+
+### Why Full Re-render?
+
+`render()` sets `taskList.innerHTML = ''` and rebuilds every visible task element on every call. This trades a small amount of CPU for zero state/DOM sync complexity. With fewer than 500 tasks, this is imperceptibly fast.
 
 ---
 
-## 13. Property-Based Test Coverage
+## Persistence
 
-The following invariants are verified by `tests/property.test.js` (22 tests, fast-check):
+### Write
 
-1. `addTask` always increases count by exactly 1
-2. Added task always appears in result array
-3. `addTask` does not mutate the original array
-4. `deleteTask` always decreases count by exactly 1
-5. Deleted task ID is absent from result
-6. Deleting a non-existent ID leaves array unchanged
-7. Double-toggling returns task to original `completed` state
-8. Toggle preserves id, text, priority, dueDate
-9. Toggle does not change array length
-10. `filterTasks` result is always a subset of input
-11. Filter "all" returns all tasks
-12. Filter "active" returns only `!completed` tasks
-13. Filter "completed" returns only `completed` tasks
-14. Active count + completed count === total
-15. `searchTasks` result is always a subset of input
-16. Empty query returns all tasks
-17. Whitespace query returns all tasks
-18. Search never returns a task whose text does not contain the query
-19. All task IDs in a batch are unique
-20. JSON round-trip preserves all task fields
-21. `editTask` preserves task ID
-22. `editTask` with empty string does not change task text
+```javascript
+function saveTasks(tasks) {
+  try {
+    localStorage.setItem('todoflow_tasks', JSON.stringify(tasks));
+  } catch (e) {
+    console.warn('[TodoFlow] localStorage save failed:', e);
+  }
+}
+```
+
+### Read (page load)
+
+```javascript
+function loadTasks() {
+  try {
+    var raw = localStorage.getItem('todoflow_tasks');
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(function (t) {
+      return t
+        && typeof t.id        === 'string'
+        && typeof t.text      === 'string'
+        && typeof t.completed === 'boolean';
+    });
+  } catch (e) {
+    console.warn('[TodoFlow] localStorage load failed:', e);
+    return [];
+  }
+}
+```
+
+Corrupt entries and non-array values are discarded; the application always starts in a valid state.
+
+---
+
+## Render Flow
+
+```
+render()
+│
+├─ visible = getVisibleTasks(state.tasks, state.filter, state.search)
+├─ activeCount   = state.tasks.filter(!completed).length
+├─ completedCount = state.tasks.filter(completed).length
+├─ pct = completedCount / state.tasks.length * 100 (or 0)
+│
+├─ Update all display elements:
+│    activeCountEl, statTotalEl, statDoneEl, statProgressEl
+│    progressRingEl (stroke-dashoffset = 138.2 × (1 - pct/100))
+│    progressPctEl, progressSubEl
+│    navTotalEl, navActiveEl, navDoneEl
+│    visibleCountBadgeEl, summaryTextEl
+│
+├─ clearCompletedBtn.style.display = completedCount > 0 ? '' : 'none'
+│
+├─ Update filter-tab--active class + aria-selected on each .filter-tab
+│
+├─ if visible.length === 0:
+│    taskList.style.display = 'none'
+│    emptyState.style.display = ''
+│    set emptyTitle/emptySub text (two cases: no tasks vs no match)
+│  else:
+│    taskList.style.display = ''
+│    emptyState.style.display = 'none'
+│
+└─ taskList.innerHTML = ''
+   visible.forEach(task → taskList.appendChild(buildTaskEl(task)))
+```
+
+### buildTaskEl(task) → `<li>`
+
+```
+<li class="task-item [task-item--completed]" data-id="{id}">
+  <input type="checkbox" class="task-checkbox" [checked]>
+  <div class="task-body">
+    <span class="task-text">{text}</span>
+    <div class="task-meta">
+      <span class="priority-badge priority-badge--{priority}">{priority}</span>
+      [<span class="due-date [due-date--overdue]">{⚠|📅} {formatted date}</span>]
+    </div>
+  </div>
+  <div class="task-actions">
+    <button class="btn btn--icon btn--edit" aria-label="Edit: {text}">✏️</button>
+    <button class="btn btn--icon btn--delete" aria-label="Delete: {text}">🗑️</button>
+  </div>
+</li>
+```
+
+---
+
+## Edit Mode Design
+
+Inline edit uses a **DOM substitution** pattern — no hidden elements:
+
+```
+startEdit(id, li, textEl)
+│
+├─ Guard: if taskList already has a .task-edit-input → blur it and return
+├─ Find task in state.tasks by id
+├─ Create <input class="task-edit-input"> with value = task.text
+├─ textEl.parentNode.replaceChild(inp, textEl)
+├─ inp.focus(); inp.select()
+│
+├─ let handled = false   ← prevents blur double-fire
+│
+├─ commit():
+│    if (handled) return
+│    handled = true
+│    if (newText && newText !== task.text) → editTask() + saveTasks()
+│    render()
+│
+├─ cancel():
+│    if (handled) return
+│    handled = true
+│    render()   ← no save; original text restored by re-render
+│
+├─ keydown: Enter → commit()  |  Escape → cancel()
+└─ blur: commit() (once, via { once: true })
+```
+
+The `handled` flag is critical: when Enter is pressed, `render()` removes the `<input>` from the DOM, which fires a `blur` event. Without the flag, `commit()` would run twice. With it, the second call returns immediately.
+
+---
+
+## Filter and Search Composition
+
+```
+Filter state:  state.filter ∈ { 'all', 'active', 'completed' }
+Search state:  state.search (string, may be empty)
+
+Filter → Search pipeline (not Search → Filter):
+  filterTasks(state.tasks, state.filter)   // status gate first
+      ↓
+  searchTasks(filtered, state.search)       // text search within filtered set
+      ↓
+  visible[]   // passed to render()
+```
+
+Neither filter nor search modifies `state.tasks` — both are pure display derivations.
+
+---
+
+## Progress Ring
+
+The SVG ring uses the dash-offset animation technique:
+
+```
+Circle radius: 22px
+Circumference: 2π × 22 ≈ 138.2px
+
+stroke-dasharray:   138.2        (always fixed)
+stroke-dashoffset:  138.2 × (1 - pct/100)
+
+0%  complete → offset = 138.2 (ring invisible)
+50% complete → offset =  69.1 (half ring filled)
+100% complete → offset =  0   (full ring filled)
+
+Animated via CSS: transition: stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1)
+Disabled via:     @media (prefers-reduced-motion: reduce)
+```
+
+---
+
+## Responsive Breakpoints
+
+| Breakpoint | Layout change |
+|------------|--------------|
+| `≥ 900px` | Full two-column: 230 px sidebar + flexible main |
+| `< 900px` | Sidebar narrows to 200 px; stats in 2-column grid |
+| `< 720px` | Sidebar becomes horizontal top nav bar; filter/search stack |
+| `< 520px` | Single column; add-form stacks; stat cards 2×2; btn--icon always visible |
+| `< 360px` | Stat card labels and icons hidden to save space |
+
+---
+
+## Accessibility Decisions
+
+| Decision | Implementation |
+|----------|---------------|
+| All buttons have `type="button"` | Prevents accidental form submission |
+| Checkboxes have per-task `aria-label` | Describes action + task text |
+| Edit/delete have per-task `aria-label` | Screen reader announces target |
+| Filter tabs have `role="tab"` + `aria-selected` | Updated on every render |
+| Validation message has `role="alert"` + `aria-live="assertive"` | Announced immediately |
+| Icon buttons always visible on mobile | `opacity: 1 !important` at `< 520px` |
+| Edit/delete at reduced opacity (0.45) on desktop | Still clickable; hover brings to full opacity |
+
+---
+
+## Key Implementation Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Single IIFE, no ES modules | Works with any static server; no bundler needed |
+| `task-logic.js` mirrors `app.js` pure functions | Enables Node.js property-based testing without a DOM |
+| Full re-render on every change | Eliminates state/DOM sync bugs; fast enough for ≤500 tasks |
+| `style.display` not `hidden` attribute | More reliable with JavaScript show/hide toggling |
+| `handled` flag in edit mode | Prevents blur double-commit after Enter/Escape triggers DOM removal |
+| ISO lexicographic date comparison for overdue | `'YYYY-MM-DD' < 'YYYY-MM-DD'` is correct for date ordering |
+| Tasks prepended (not appended) | Most recently added task is always first; no sort step needed |
+| `try/catch` around all localStorage calls | Private browsing and full storage silently recover |
+| Sidebar nav fires same `handleFilterChange` as tabs | Single handler, no duplicated logic |
+| Greeting set once in `init()` | No interval timer; correct for the session lifetime |

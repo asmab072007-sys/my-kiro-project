@@ -1,384 +1,351 @@
-# TodoFlow — Requirements
+# TodoFlow — Requirements Specification
 
-**Version:** 1.0.0  
-**Status:** Implemented  
-**Stack:** HTML5 · CSS3 · Vanilla JavaScript (ES5-compatible IIFE) · localStorage  
-**Entry point:** `index.html` + `app.js` + `style.css`  
-**Run command:** `python3 -m http.server 8080` → open `http://localhost:8080`
-
----
-
-## 1. Purpose
-
-TodoFlow is a client-side task-management web application. It lets a single user create, organise, and track daily tasks entirely in the browser with no backend, no login, and no build step required. All data persists via `localStorage` under the key `todoflow_tasks`.
+**Feature:** TodoFlow Task Management Application  
+**Type:** Existing implementation — spec written from source of truth  
+**Status:** ✅ Complete  
+**Source files:** `app.js` · `task-logic.js` · `index.html` · `style.css`  
+**Run:** `python3 -m http.server 8080` → `http://localhost:8080`
 
 ---
 
-## 2. User Stories
+## Introduction
 
-### US-1 — Add Task
-```
-AS A user
-I WANT TO type a task description, choose a priority and optional due date,
-  then press Enter or click "Add task"
-SO THAT the task immediately appears at the top of my task list
-  and is saved for future sessions
-```
-
-### US-2 — Complete a Task
-```
-AS A user
-I WANT TO click the checkbox next to a task
-SO THAT the task is visually marked done (strikethrough, reduced opacity)
-  and the active / completed counters update instantly
-```
-
-### US-3 — Uncomplete a Task
-```
-AS A user
-I WANT TO click the checkbox on a completed task
-SO THAT the task reverts to active status
-  and the counters reflect the change
-```
-
-### US-4 — Edit a Task
-```
-AS A user
-I WANT TO click the edit button (✏️) on a task
-SO THAT I can update the task text inline,
-  save with Enter or by clicking away,
-  and cancel without saving with Escape
-```
-
-### US-5 — Delete a Task
-```
-AS A user
-I WANT TO click the delete button (🗑️) on a task
-SO THAT the task is permanently removed from the list and from localStorage
-```
-
-### US-6 — Search Tasks
-```
-AS A user
-I WANT TO type in the search box
-SO THAT the task list filters in real time to only show tasks
-  whose text contains the search term (case-insensitive)
-```
-
-### US-7 — Filter by Status
-```
-AS A user
-I WANT TO click All / Active / Completed filter tabs
-SO THAT I only see tasks matching that status
-  while search continues to apply within the filtered set
-```
-
-### US-8 — Set Priority
-```
-AS A user
-I WANT TO choose Low, Medium, or High priority when adding a task
-SO THAT each task displays a colour-coded priority badge
-  (green = Low, amber = Medium, red = High)
-```
-
-### US-9 — Set Due Date
-```
-AS A user
-I WANT TO optionally enter a due date when adding a task
-SO THAT the task shows the formatted date,
-  and past-due active tasks are highlighted with an overdue warning
-```
-
-### US-10 — See Task Counts
-```
-AS A user
-I WANT TO see live counters for Total, In Progress (active), Completed,
-  and a completion percentage
-SO THAT I can understand my workload at a glance without counting manually
-```
-
-### US-11 — Persist Tasks Across Sessions
-```
-AS A user
-I WANT my tasks, completion states, priorities, and due dates
-  to still be there when I refresh or reopen the browser
-SO THAT I never lose my work
-```
-
-### US-12 — Clear Completed Tasks
-```
-AS A user
-I WANT TO click "Clear completed" when it is visible
-SO THAT all completed tasks are removed from the list and localStorage in one action
-```
-
-### US-13 — See an Empty State
-```
-AS A user
-WHEN the task list is empty (no tasks, or no results match filter/search)
-I WANT TO see a friendly message instead of a blank area
-SO THAT I understand the state of the application
-```
+TodoFlow is a **client-side, single-page task management application** that runs entirely in the browser. There is no backend, no authentication, no build step, and no installation required. Tasks are persisted automatically in `localStorage`. The application is designed to be opened, used, and relied on immediately.
 
 ---
 
-## 3. Functional Requirements
+## Requirements
 
-| ID    | Requirement |
-|-------|-------------|
-| FR-1  | User can add a task with non-empty, trimmed text (max 200 characters) |
-| FR-2  | Attempting to add an empty or whitespace-only task shows the inline message "Task cannot be empty" and does NOT create a task |
-| FR-3  | Priority is set at creation time: `low`, `medium`, or `high`; any invalid value defaults to `medium` |
-| FR-4  | Due date is optional; stored as `YYYY-MM-DD` string or `null` |
-| FR-5  | New tasks are prepended to the top of the list |
-| FR-6  | User can toggle task completion; toggle is repeatable (completing and uncompleting must both work) |
-| FR-7  | User can edit task text inline; empty text after trim is rejected silently (original text preserved) |
-| FR-8  | User can delete any task; deletion is immediate, no confirmation dialog |
-| FR-9  | Filter "All" shows every task regardless of status |
-| FR-10 | Filter "Active" shows only tasks where `completed === false` |
-| FR-11 | Filter "Completed" shows only tasks where `completed === true` |
-| FR-12 | Search is case-insensitive substring match applied on top of the active filter |
-| FR-13 | Clearing search restores all tasks that match the current filter |
-| FR-14 | A task is overdue if: `dueDate` is not null, `dueDate < today` (ISO string comparison), and `completed === false` |
-| FR-15 | Overdue tasks display the due date with a red warning badge (⚠) |
-| FR-16 | Completed overdue tasks are NOT marked overdue |
-| FR-17 | The header stat cards always show live counts: Total, Active (In Progress), Completed, Completion % |
-| FR-18 | The sidebar progress ring animates to reflect `completedCount / totalCount × 100` |
-| FR-19 | "Clear completed" button is hidden when there are no completed tasks; visible otherwise |
-| FR-20 | All tasks are saved to `localStorage` under the key `todoflow_tasks` as a JSON array after every mutation |
-| FR-21 | On page load, tasks are read from `localStorage`; corrupt or non-array data is discarded gracefully |
-| FR-22 | The empty state shows different text depending on context: "No tasks yet" (nothing added), "No tasks match" (filter/search has no results) |
+### Requirement 1 — Add Task
 
----
+**User Story:**
+As a user, I want to add a task with text, priority, and an optional due date, so that I can track what I need to do.
 
-## 4. Non-Functional Requirements
+**Acceptance Criteria:**
 
-| ID     | Requirement |
-|--------|-------------|
-| NFR-1  | No backend, no build step, no npm install required to run |
-| NFR-2  | Single `python3 -m http.server 8080` command serves the complete application |
-| NFR-3  | No uncaught JavaScript errors in the browser console |
-| NFR-4  | App is usable on screens from 320 px to 1440 px wide |
-| NFR-5  | All interactive elements (add, edit, delete, complete, filter, search) are keyboard accessible |
-| NFR-6  | Edit mode: Enter saves, Escape cancels, clicking away saves |
-| NFR-7  | No external runtime dependencies (fonts loaded from Google Fonts CDN are the only network request) |
-| NFR-8  | `localStorage` write errors are caught and logged; they must not crash the application |
-| NFR-9  | Color contrast ratio ≥ 4.5:1 for all body text against its background |
-| NFR-10 | `prefers-reduced-motion` media query disables animations |
+1. WHEN the user types non-empty text and clicks "Add task" or presses Enter  
+   THEN a new task appears at the top of the task list  
+   AND the task is saved to localStorage  
+   AND the Total and Active counters increment by 1  
+   AND the input field is cleared and focused
+
+2. WHEN the user attempts to add a task with empty or whitespace-only text  
+   THEN no task is created  
+   AND the inline message "Task cannot be empty" is displayed  
+   AND the message automatically clears after 3 seconds
+
+3. WHEN a new task is created  
+   THEN it has the fields: `id` (unique string), `text` (trimmed), `completed: false`, `priority` (from select), `dueDate` (from date input or null), `createdAt` (ISO timestamp)
+
+4. WHEN the priority select is set to an invalid value  
+   THEN the task is created with `priority: 'medium'` as the default
 
 ---
 
-## 5. Acceptance Criteria
+### Requirement 2 — Complete and Uncomplete a Task
 
-All criteria follow the **GIVEN / WHEN / THEN** format and are tested in `tests/functional-sim.js` and `tests/property.test.js`.
+**User Story:**
+As a user, I want to mark a task as complete or incomplete by clicking its checkbox, so that I can track my progress.
 
-### AC-1: Add Task
-```
-GIVEN the task input is focused and contains non-empty text
-  AND a priority is selected (defaults to "medium")
-WHEN the user clicks "Add task" or presses Enter
-THEN a new task object is created with the given text (trimmed), priority, dueDate, completed=false
-AND the task appears at the top of the visible task list
-AND `localStorage['todoflow_tasks']` includes the new task
-AND the Total and Active counters increment by 1
-AND the input field is cleared and focused
-```
+**Acceptance Criteria:**
 
-### AC-2: Reject Empty Task
-```
-GIVEN the task input is empty or contains only whitespace
-WHEN the user clicks "Add task" or presses Enter
-THEN no task is created
-AND the inline validation message "Task cannot be empty" appears
-AND the message disappears after 3 seconds
-```
+1. GIVEN an active task is displayed  
+   WHEN the user clicks the task checkbox  
+   THEN `task.completed` becomes `true`  
+   AND the task gains strikethrough styling and reduced opacity  
+   AND the Active counter decrements by 1  
+   AND the Completed counter increments by 1  
+   AND the change is saved to localStorage
 
-### AC-3: Complete Task
-```
-GIVEN an active (completed=false) task is visible
-WHEN the user clicks its checkbox
-THEN task.completed becomes true
-AND the task text gains strikethrough styling and reduced opacity
-AND the Active counter decrements by 1
-AND the Completed counter increments by 1
-AND the change is persisted to localStorage
-```
+2. GIVEN a completed task is displayed  
+   WHEN the user clicks the task checkbox  
+   THEN `task.completed` becomes `false`  
+   AND the strikethrough and reduced opacity are removed  
+   AND the Active counter increments by 1  
+   AND the Completed counter decrements by 1  
+   AND the change is saved to localStorage
 
-### AC-4: Uncomplete Task
-```
-GIVEN a completed task is visible
-WHEN the user clicks its checkbox
-THEN task.completed becomes false
-AND the strikethrough and reduced opacity are removed
-AND the Active counter increments by 1
-AND the Completed counter decrements by 1
-AND the change is persisted to localStorage
-```
-
-### AC-5: Edit Task
-```
-GIVEN a task exists
-WHEN the user clicks the ✏️ edit button
-THEN the task text is replaced by an inline text input pre-filled with the current text
-
-WHEN the user types new text and presses Enter (or clicks away)
-THEN the task.text is updated to the trimmed new text
-AND the change is persisted to localStorage
-
-WHEN the user presses Escape
-THEN the input is removed and the original text is restored without saving
-
-WHEN the user clears the input and presses Enter
-THEN the original text is preserved (empty edit is rejected)
-```
-
-### AC-6: Delete Task
-```
-GIVEN a task exists
-WHEN the user clicks the 🗑️ delete button
-THEN the task is removed from the list immediately
-AND removed from localStorage
-AND all counters update to reflect the removal
-```
-
-### AC-7: Filter — All
-```
-GIVEN tasks with mixed completion states exist
-WHEN the user selects the "All" filter tab
-THEN every task in state.tasks (matching the current search) is shown
-AND the "All" tab has the active/selected visual state
-```
-
-### AC-8: Filter — Active
-```
-GIVEN tasks with mixed completion states exist
-WHEN the user selects the "Active" filter tab
-THEN only tasks where completed=false (and matching search) are shown
-AND no completed task is visible
-```
-
-### AC-9: Filter — Completed
-```
-GIVEN at least one completed task exists
-WHEN the user selects the "Completed" filter tab
-THEN only tasks where completed=true (and matching search) are shown
-AND no active task is visible
-```
-
-### AC-10: Search
-```
-GIVEN tasks exist
-WHEN the user types a search query (e.g. "kiro")
-THEN the list shows only tasks whose text contains "kiro" (case-insensitive)
-
-WHEN the user clears the search input
-THEN all tasks matching the current filter are shown again
-```
-
-### AC-11: Search + Filter Combined
-```
-GIVEN tasks exist with mixed states
-WHEN filter = "active" AND search = "review"
-THEN only active tasks containing "review" are shown
-AND completed tasks containing "review" are NOT shown
-```
-
-### AC-12: Priority Badge
-```
-GIVEN a task with priority = "high" is displayed
-THEN a red badge labelled "high" appears in the task metadata row
-
-GIVEN a task with priority = "medium"
-THEN an amber badge labelled "medium" appears
-
-GIVEN a task with priority = "low"
-THEN a green badge labelled "low" appears
-```
-
-### AC-13: Due Date Display
-```
-GIVEN a task has dueDate = "2026-12-31"
-WHEN the task is rendered
-THEN the due date is displayed as "Dec 31, 2026" with a 📅 icon
-```
-
-### AC-14: Overdue Detection
-```
-GIVEN a task has a dueDate that is earlier than today's ISO date
-  AND the task is not completed
-WHEN the task is rendered
-THEN the due date element has class "due-date--overdue"
-AND displays a ⚠ warning prefix
-
-GIVEN a task is completed (regardless of dueDate)
-THEN it is NOT shown as overdue
-```
-
-### AC-15: Persistence
-```
-GIVEN one or more tasks exist (with various states, priorities, due dates)
-WHEN the user refreshes the browser
-THEN every task is restored from localStorage with the same id, text,
-  completed, priority, dueDate, and createdAt values
-```
-
-### AC-16: Corrupt localStorage Recovery
-```
-GIVEN localStorage contains malformed JSON or a non-array value
-WHEN the app initialises
-THEN it starts with an empty task list
-AND no JavaScript error is thrown
-```
-
-### AC-17: Counters
-```
-GIVEN the app state changes (add/edit/delete/toggle)
-THEN the following always reflect the true state:
-  - stat-total     = state.tasks.length
-  - active-count   = tasks where !completed
-  - stat-done      = tasks where completed
-  - stat-progress  = Math.round(done/total * 100)% (0% when total=0)
-  - progress ring  = animates to match stat-progress
-```
-
-### AC-18: Empty States
-```
-GIVEN state.tasks.length === 0
-THEN the task list is hidden and the empty state shows "No tasks yet"
-
-GIVEN state.tasks.length > 0 but visible.length === 0
-THEN the empty state shows "No tasks match"
-```
+3. WHEN a task is toggled twice  
+   THEN `task.completed` returns to its original value  
+   AND all other task fields (id, text, priority, dueDate) are unchanged
 
 ---
 
-## 6. Task Data Model
+### Requirement 3 — Edit a Task
 
-The canonical task object stored in localStorage and held in `state.tasks`:
+**User Story:**
+As a user, I want to edit a task's text inline, so that I can correct mistakes or update task details without deleting and recreating it.
 
-```javascript
-{
-  id:        string,   // generateId() = Date.now().toString(36) + '-' + random(7 chars)
-  text:      string,   // non-empty, trimmed; max 200 chars enforced by HTML attribute
-  completed: boolean,  // false on creation; toggled by handleToggle()
-  priority:  string,   // 'low' | 'medium' | 'high'; default 'medium'
-  dueDate:   string|null, // 'YYYY-MM-DD' ISO date string, or null
-  createdAt: string    // new Date().toISOString() at creation time
-}
-```
+**Acceptance Criteria:**
 
-**localStorage key:** `todoflow_tasks`  
-**Storage format:** `JSON.stringify(state.tasks)` — a JSON array of task objects.
+1. GIVEN a task is visible  
+   WHEN the user clicks the ✏️ edit button  
+   THEN the task text span is replaced by a focused text input pre-filled with the current text
+
+2. WHEN the user types new text and presses Enter OR clicks away (blur)  
+   THEN the task text is updated to the trimmed new value  
+   AND the change is saved to localStorage  
+   AND the input is replaced by the updated task text span
+
+3. WHEN the user presses Escape while editing  
+   THEN the original text is restored without any change to localStorage
+
+4. WHEN the user clears the input and presses Enter  
+   THEN the edit is rejected silently (original text is preserved)
+
+5. WHEN a second task's edit button is clicked while another task is already in edit mode  
+   THEN the first edit is committed (via blur) before the second edit begins
 
 ---
 
-## 7. Out of Scope
+### Requirement 4 — Delete a Task
+
+**User Story:**
+As a user, I want to delete a task so that I can permanently remove items I no longer need.
+
+**Acceptance Criteria:**
+
+1. GIVEN a task is visible  
+   WHEN the user clicks the 🗑️ delete button  
+   THEN the task is immediately removed from the list  
+   AND removed from localStorage  
+   AND all counters update to reflect the removal
+
+2. WHEN a task is deleted  
+   THEN no other tasks are affected
+
+---
+
+### Requirement 5 — Filter Tasks
+
+**User Story:**
+As a user, I want to filter tasks by All, Active, or Completed so that I can focus on what is relevant.
+
+**Acceptance Criteria:**
+
+1. WHEN the user clicks the "All" filter tab  
+   THEN all tasks are shown (subject to the current search)  
+   AND the "All" tab has the active visual state
+
+2. WHEN the user clicks the "Active" filter tab  
+   THEN only tasks where `completed === false` are shown  
+   AND no completed task is visible
+
+3. WHEN the user clicks the "Completed" filter tab  
+   THEN only tasks where `completed === true` are shown  
+   AND no active task is visible
+
+4. WHEN the user clicks a sidebar navigation item (Dashboard / My Tasks / Active / Completed)  
+   THEN the corresponding filter is applied  
+   AND the filter tabs in the toolbar update to match
+
+5. WHEN the active filter has no matching tasks  
+   THEN the empty state is shown with "No tasks match"
+
+---
+
+### Requirement 6 — Search Tasks
+
+**User Story:**
+As a user, I want to search tasks by text so that I can quickly find a specific item.
+
+**Acceptance Criteria:**
+
+1. WHEN the user types in the search box  
+   THEN the task list immediately shows only tasks whose text contains the query (case-insensitive)  
+   AND the search is applied on top of the current filter
+
+2. WHEN the user clears the search input  
+   THEN all tasks matching the current filter are shown again
+
+3. WHEN search returns no results  
+   THEN the empty state is shown with "No tasks match"
+
+4. WHEN search is active AND a filter is applied  
+   THEN only tasks that satisfy BOTH the filter AND the search query are shown
+
+---
+
+### Requirement 7 — Set Priority
+
+**User Story:**
+As a user, I want to assign a priority (Low, Medium, High) to each task so that I can identify what is most important.
+
+**Acceptance Criteria:**
+
+1. WHEN the user adds a task with priority "high"  
+   THEN a red pill badge labelled "high" appears in the task's metadata row
+
+2. WHEN the user adds a task with priority "medium"  
+   THEN an amber pill badge labelled "medium" appears
+
+3. WHEN the user adds a task with priority "low"  
+   THEN a green pill badge labelled "low" appears
+
+4. WHEN a task is displayed  
+   THEN the priority badge is always visible (not hidden until hover)
+
+5. WHEN the priority select has no value selected  
+   THEN the task defaults to "medium" priority
+
+---
+
+### Requirement 8 — Set Due Date
+
+**User Story:**
+As a user, I want to optionally set a due date on a task so that I know when it needs to be completed.
+
+**Acceptance Criteria:**
+
+1. WHEN the user sets a due date and adds a task  
+   THEN the due date is stored as a `YYYY-MM-DD` string  
+   AND displayed in the task as "Mon DD, YYYY" with a 📅 icon
+
+2. WHEN the due date input is left empty  
+   THEN `task.dueDate` is stored as `null`  
+   AND no due date is shown on the task
+
+3. WHEN a task has a due date that is earlier than today's date  
+   AND the task is not completed  
+   THEN the task is marked as overdue  
+   AND the due date is displayed with a ⚠ prefix and red warning styling
+
+4. WHEN a task is completed  
+   THEN it is never shown as overdue regardless of its due date
+
+5. WHEN the page is refreshed  
+   THEN due dates are restored exactly as stored
+
+---
+
+### Requirement 9 — Task Counters and Progress
+
+**User Story:**
+As a user, I want to see live statistics so that I can understand my workload and progress at a glance.
+
+**Acceptance Criteria:**
+
+1. AFTER any task is added, deleted, completed, or uncompleted  
+   THEN all of the following update immediately:
+   - `stat-total` = total number of tasks
+   - `active-count` (In Progress) = tasks where `!completed`
+   - `stat-done` (Completed) = tasks where `completed`
+   - `stat-progress` = `Math.round(done / total * 100)` % (0% when total = 0)
+   - Sidebar nav counts (nav-total, nav-active, nav-done)
+   - Footer summary text
+   - Visible-count badge in the toolbar
+
+2. WHEN the progress percentage changes  
+   THEN the circular SVG progress ring in the sidebar animates to the new value  
+   AND the "X of Y done" text below it updates
+
+3. WHEN there are zero tasks  
+   THEN `stat-progress` shows "0%"  
+   AND the progress ring is empty
+
+---
+
+### Requirement 10 — localStorage Persistence
+
+**User Story:**
+As a user, I want my tasks to survive a page refresh so that I never lose my work.
+
+**Acceptance Criteria:**
+
+1. AFTER any task mutation (add / edit / delete / toggle / clear completed)  
+   THEN `localStorage['todoflow_tasks']` is immediately updated with the current task array as JSON
+
+2. WHEN the page loads  
+   THEN tasks are read from `localStorage['todoflow_tasks']`  
+   AND every task with valid `id` (string), `text` (string), `completed` (boolean) is restored  
+   AND any malformed entry is silently discarded
+
+3. WHEN localStorage contains corrupt JSON or a non-array value  
+   THEN the application starts with an empty task list  
+   AND no JavaScript error is thrown
+
+4. WHEN localStorage is full or write access is denied  
+   THEN the error is caught and logged with `console.warn`  
+   AND the application continues to function normally for the session
+
+---
+
+### Requirement 11 — Empty States
+
+**User Story:**
+As a user, when there are no tasks to display, I want to see a helpful message instead of a blank area.
+
+**Acceptance Criteria:**
+
+1. WHEN `state.tasks.length === 0`  
+   THEN the task list is hidden  
+   AND the empty state shows the SVG illustration, "All clear!", and "You have no tasks here. Add one to get started."
+
+2. WHEN tasks exist but none match the current filter or search  
+   THEN the task list is hidden  
+   AND the empty state shows "No tasks match" and "Try a different filter or search term."
+
+3. WHEN at least one task is visible  
+   THEN the empty state is hidden  
+   AND the task list is shown
+
+---
+
+### Requirement 12 — Clear Completed
+
+**User Story:**
+As a user, I want to remove all completed tasks at once so that I can declutter my list.
+
+**Acceptance Criteria:**
+
+1. WHEN there are one or more completed tasks  
+   THEN the "Clear completed" button is visible
+
+2. WHEN there are no completed tasks  
+   THEN the "Clear completed" button is hidden
+
+3. WHEN the user clicks "Clear completed"  
+   THEN all tasks where `completed === true` are removed from `state.tasks`  
+   AND removed from localStorage  
+   AND the task list and counters update immediately
+
+---
+
+### Requirement 13 — Responsive Layout and Accessibility
+
+**User Story:**
+As a user, I want the application to work on any screen size and be usable with a keyboard.
+
+**Acceptance Criteria:**
+
+1. AT viewport widths from 320 px to 1440 px  
+   THEN the layout adapts without horizontal scrolling  
+   AND all controls remain usable
+
+2. WHEN viewport width is below 720 px  
+   THEN the sidebar becomes a horizontal top navigation bar
+
+3. ALL interactive elements (add, checkbox, edit, delete, filter, search, clear completed)  
+   CAN be reached and activated using keyboard Tab + Enter/Space
+
+4. WHEN an element receives focus  
+   THEN a visible focus outline is shown
+
+5. ALL icon-only buttons  
+   HAVE an `aria-label` describing their action and target task
+
+6. WHEN the user has `prefers-reduced-motion` enabled  
+   THEN all CSS transitions and animations are disabled
+
+---
+
+## Non-Requirements (Out of Scope)
 
 - User authentication or accounts
-- Multi-user collaboration
-- Server-side storage or sync
+- Multi-user collaboration or syncing
+- Server-side storage or API calls
 - Task ordering / drag-and-drop reordering
-- Sub-tasks or task nesting
-- Recurring tasks
-- Notifications or reminders
-- Editing priority or due date after creation
+- Sub-tasks or task hierarchies
+- Recurring tasks or reminders
+- Editing priority or due date after task creation
+- Dark mode
