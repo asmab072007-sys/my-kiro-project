@@ -145,6 +145,10 @@
   var taskList, emptyState, emptyTitle, emptySub;
   var validationMsg, searchInput;
   var activeCountEl, summaryTextEl, clearCompletedBtn;
+  var statTotalEl, statDoneEl;          // stat cards
+  var statProgressEl, progressRingEl, progressPctEl, progressSubEl; // progress
+  var navTotalEl, navActiveEl, navDoneEl; // sidebar counters
+  var visibleCountBadgeEl;              // toolbar badge
   var filterTabEls;  // array, not NodeList
 
   /* =============================================
@@ -177,6 +181,34 @@
 
     /* header badge */
     activeCountEl.textContent = activeCount;
+
+    /* stat cards */
+    if (statTotalEl)    statTotalEl.textContent    = state.tasks.length;
+    if (statDoneEl)     statDoneEl.textContent     = completedCount;
+
+    /* progress % */
+    var pct = state.tasks.length > 0
+      ? Math.round((completedCount / state.tasks.length) * 100) : 0;
+    if (statProgressEl) statProgressEl.textContent = pct + '%';
+    if (progressPctEl)  progressPctEl.textContent  = pct + '%';
+    if (progressSubEl)  progressSubEl.textContent  =
+      completedCount + ' of ' + state.tasks.length + ' done';
+    if (progressRingEl) {
+      var circumference = 138.2;
+      var offset = circumference - (pct / 100) * circumference;
+      progressRingEl.style.strokeDashoffset = offset;
+    }
+
+    /* sidebar nav counts */
+    if (navTotalEl)  navTotalEl.textContent  = state.tasks.length;
+    if (navActiveEl) navActiveEl.textContent = activeCount;
+    if (navDoneEl)   navDoneEl.textContent   = completedCount;
+
+    /* visible count badge */
+    if (visibleCountBadgeEl) {
+      visibleCountBadgeEl.textContent =
+        visible.length + ' task' + (visible.length !== 1 ? 's' : '');
+    }
 
     /* footer summary */
     summaryTextEl.textContent =
@@ -430,6 +462,16 @@
     activeCountEl    = $('active-count');
     summaryTextEl    = $('summary-text');
     clearCompletedBtn = $('clear-completed-btn');
+    statTotalEl      = $('stat-total');
+    statDoneEl       = $('stat-done');
+    statProgressEl   = $('stat-progress');
+    progressRingEl   = $('progress-ring-fill');
+    progressPctEl    = $('progress-pct');
+    progressSubEl    = $('progress-sub');
+    navTotalEl       = $('nav-total');
+    navActiveEl      = $('nav-active');
+    navDoneEl        = $('nav-done');
+    visibleCountBadgeEl = $('visible-count-badge');
     filterTabEls     = Array.prototype.slice.call(
       document.querySelectorAll('.filter-tab')
     );
@@ -456,6 +498,47 @@
     });
 
     clearCompletedBtn.addEventListener('click', handleClearCompleted);
+
+    /* wire sidebar nav items as filter shortcuts */
+    var sidebarNavItems = Array.prototype.slice.call(
+      document.querySelectorAll('.sidebar-nav-item[data-filter]')
+    );
+    sidebarNavItems.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        /* update active state */
+        sidebarNavItems.forEach(function (b) {
+          b.classList.remove('sidebar-nav-item--active');
+          b.removeAttribute('aria-current');
+        });
+        btn.classList.add('sidebar-nav-item--active');
+        btn.setAttribute('aria-current', 'page');
+        /* trigger filter change */
+        handleFilterChange(btn.getAttribute('data-filter'));
+      });
+    });
+
+    /* set greeting based on time of day */
+    (function () {
+      var greetEl = $('greeting-title');
+      if (!greetEl) return;
+      var h = new Date().getHours();
+      var g = h < 12 ? 'Good morning 👋'
+            : h < 17 ? 'Good afternoon 👋'
+            : 'Good evening 👋';
+      greetEl.textContent = g;
+    }());
+
+    /* set current date display */
+    (function () {
+      var dateEl = $('topbar-date');
+      if (!dateEl) return;
+      var now  = new Date();
+      var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      var months = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+      dateEl.textContent =
+        days[now.getDay()] + ', ' + months[now.getMonth()] + ' ' + now.getDate();
+    }());
 
     /* load persisted tasks and render */
     state.tasks = loadTasks();
